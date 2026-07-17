@@ -11,10 +11,14 @@ import (
 func main() {
 	filePath := parseFlags()
 
-	urls, err := readURLs(filePath)
+	urls, warnings, err := readURLs(filePath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
+	}
+
+	for _, w := range warnings {
+		fmt.Println("warning: ", w)
 	}
 
 	jobs := make(chan string, len(urls))
