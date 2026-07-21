@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-func worker(ctx context.Context, id int, jobs <-chan string, results chan<- string, wg *sync.WaitGroup) {
+func worker(ctx context.Context, id int, jobs <-chan string, results chan<- checkResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
 		select {
