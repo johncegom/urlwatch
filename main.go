@@ -22,7 +22,7 @@ func main() {
 	}
 
 	jobs := make(chan string, len(urls))
-	results := make(chan string, len(urls))
+	results := make(chan checkResult, len(urls))
 	var wg sync.WaitGroup
 	numWorkers := 5
 
@@ -42,7 +42,21 @@ func main() {
 	wg.Wait()
 	close(results)
 
-	for v := range results {
-		fmt.Println(v)
+	hasFailure := false
+
+	for r := range results {
+		switch r.status {
+		case statusHealthy:
+			fmt.Printf("%v is %v(%v) \n", r.url, r.status, r.statusCode)
+		case statusReachable:
+			fmt.Printf("%v is %v(%v) but %v \n", r.url, r.status, r.statusCode, r.errMsg)
+		default:
+			fmt.Printf("%v is %v(%v) with error: %v \n", r.url, r.status, r.statusCode, r.errMsg)
+			hasFailure = true
+		}
+	}
+
+	if hasFailure {
+		os.Exit(1)
 	}
 }
