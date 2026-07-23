@@ -35,6 +35,16 @@ func newCheckResult(url string, status checkStatus, statusCode int, errMsg strin
 	}
 }
 
+func classify(statusCode int) checkStatus {
+	if statusCode >= 200 && statusCode < 300 {
+		return statusHealthy
+	} else if statusCode == 401 || statusCode == 403 {
+		return statusReachable
+	} else {
+		return statusFailure
+	}
+}
+
 func checkURL(url string, results chan<- checkResult) {
 	start := time.Now()
 
@@ -58,14 +68,11 @@ func checkURL(url string, results chan<- checkResult) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		results <- newCheckResult(url, statusHealthy, resp.StatusCode, "", start)
-		return
-	} else if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		results <- newCheckResult(url, statusReachable, resp.StatusCode, "may require authentication", start)
-		return
-	} else {
-		results <- newCheckResult(url, statusFailure, resp.StatusCode, "", start)
-		return
+	status := classify(resp.StatusCode)
+	errMsg := ""
+	if status == statusReachable {
+		errMsg = "may require authentication"
 	}
+
+	results <- newCheckResult(url, status, resp.StatusCode, errMsg, start)
 }
