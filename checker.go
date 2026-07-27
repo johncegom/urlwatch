@@ -35,37 +35,63 @@ func newCheckResult(url string, status checkStatus, statusCode int, errMsg strin
 	}
 }
 
-func checkURL(url string, results chan<- checkResult) {
-	start := time.Now()
+func classify(statusCode int) checkStatus {
+	if statusCode >= 200 && statusCode < 300 {
+		return statusHealthy
+	} else if statusCode == 401 || statusCode == 403 {
+		return statusReachable
+	} else {
+		return statusFailure
+	}
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+func doOneAttempt(url string, timeout time.Duration) (*http.Response, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		results <- newCheckResult(url, statusFailure, 0, err.Error(), start)
-		return
+		return nil, err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			results <- newCheckResult(url, statusFailure, 0, "timeout", start)
+	return http.DefaultClient.Do(req)
+}
+
+func checkURL(url string, results chan<- checkResult, timeout time.Duration) {
+	start := time.Now()
+
+	const maxRetries = 3
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		resp, err := doOneAttempt(url, timeout)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				results <- newCheckResult(url, statusFailure, 0, "timeout", start)
+				return
+			}
+			results <- newCheckResult(url, statusFailure, 0, err.Error(), start)
 			return
 		}
-		results <- newCheckResult(url, statusFailure, 0, err.Error(), start)
-		return
-	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		results <- newCheckResult(url, statusHealthy, resp.StatusCode, "", start)
-		return
-	} else if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		results <- newCheckResult(url, statusReachable, resp.StatusCode, "may require authentication", start)
-		return
-	} else {
-		results <- newCheckResult(url, statusFailure, resp.StatusCode, "", start)
-		return
+		status := classify(resp.StatusCode)
+		errMsg := ""
+
+		if status == statusReachable {
+			errMsg = "may require authentication"
+		}
+
+		if resp.StatusCode != http.StatusTooManyRequests {
+			results <- newCheckResult(url, status, resp.StatusCode, errMsg, start)
+			resp.Body.Close()
+			return
+		}
+		resp.Body.Close()
+
+		if attempt < maxRetries {
+			backoff := time.Duration(100*(1<<attempt)) * time.Millisecond
+			time.Sleep(backoff)
+		}
 	}
+
+	results <- newCheckResult(url, statusFailure, 429, "too many requests", start)
 }
