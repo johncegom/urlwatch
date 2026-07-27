@@ -45,34 +45,53 @@ func classify(statusCode int) checkStatus {
 	}
 }
 
-func checkURL(url string, results chan<- checkResult) {
-	start := time.Now()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+func doOneAttempt(url string, timeout time.Duration) (*http.Response, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		results <- newCheckResult(url, statusFailure, 0, err.Error(), start)
-		return
+		return nil, err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			results <- newCheckResult(url, statusFailure, 0, "timeout", start)
+	return http.DefaultClient.Do(req)
+}
+
+func checkURL(url string, results chan<- checkResult, timeout time.Duration) {
+	start := time.Now()
+
+	const maxRetries = 3
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		resp, err := doOneAttempt(url, timeout)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				results <- newCheckResult(url, statusFailure, 0, "timeout", start)
+				return
+			}
+			results <- newCheckResult(url, statusFailure, 0, err.Error(), start)
 			return
 		}
-		results <- newCheckResult(url, statusFailure, 0, err.Error(), start)
-		return
-	}
-	defer resp.Body.Close()
 
-	status := classify(resp.StatusCode)
-	errMsg := ""
-	if status == statusReachable {
-		errMsg = "may require authentication"
+		status := classify(resp.StatusCode)
+		errMsg := ""
+
+		if status == statusReachable {
+			errMsg = "may require authentication"
+		}
+
+		if resp.StatusCode != http.StatusTooManyRequests {
+			results <- newCheckResult(url, status, resp.StatusCode, errMsg, start)
+			resp.Body.Close()
+			return
+		}
+		resp.Body.Close()
+
+		if attempt < maxRetries {
+			backoff := time.Duration(100*(1<<attempt)) * time.Millisecond
+			time.Sleep(backoff)
+		}
 	}
 
-	results <- newCheckResult(url, status, resp.StatusCode, errMsg, start)
+	results <- newCheckResult(url, statusFailure, 429, "too many requests", start)
 }
