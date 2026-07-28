@@ -31,3 +31,27 @@ func TestReadURLs(t *testing.T) {
 		t.Errorf("got warnings %v, want a warning mentioning %q", warnings, "not-a-url")
 	}
 }
+
+func TestReadURLs_InvalidScheme(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "urls.txt")
+
+	content := "https://example.com\nhttps://another.com\nfile:///etc/passwd\n"
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	urls, warnings, err := readURLs(filePath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wantURLs := []string{"https://example.com", "https://another.com"}
+	if !reflect.DeepEqual(urls, wantURLs) {
+		t.Errorf("got urls %v, want %v", urls, wantURLs)
+	}
+
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "invalid url (non-valid scheme)") {
+		t.Errorf("got warnings %v, want a warning mentioning %q", warnings, "invalid url (non-valid scheme)")
+	}
+}
