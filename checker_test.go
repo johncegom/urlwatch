@@ -52,6 +52,26 @@ func TestCheckURL_Healthy(t *testing.T) {
 	}
 }
 
+func TestCheckURL_Reachable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	results := make(chan checkResult, 1)
+	checkURL(server.URL, results, 10*time.Millisecond)
+
+	result := <-results
+
+	if result.status != statusReachable || result.statusCode != 403 {
+		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.status, result.statusCode, statusReachable, 403)
+	}
+
+	if result.errMsg == "" {
+		t.Errorf("got empty errMsg, want a real error message")
+	}
+}
+
 func TestCheckURL_Timeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -93,7 +113,7 @@ func TestCheckURL_RetriesOn429_ThenSucceeds(t *testing.T) {
 	result := <-results
 
 	if result.status != statusHealthy || result.statusCode != 200 {
-		t.Errorf("got status: %v and statusCode = %v, want %v and %v", result.status, result.statusCode, statusHealthy, 200)
+		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.status, result.statusCode, statusHealthy, 200)
 	}
 	if callCount != 3 {
 		t.Errorf("got call %v times, want 3 times", callCount)
@@ -149,4 +169,40 @@ func TestCheckURL_EmptyURL(t *testing.T) {
 	if result.errMsg == "" {
 		t.Errorf("got empty errMsg, want a real error message")
 	}
+}
+
+func TestCheckURL_MalformedURL_ControlCharacter(t *testing.T) {
+	badURL := "http://example.com/\r\nX-Injected: true"
+
+	results := make(chan checkResult, 1)
+	checkURL(badURL, results, 200*time.Millisecond)
+	result := <-results
+
+	if result.status != statusFailure || result.statusCode != 0 {
+		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.status, result.statusCode, statusFailure, 0)
+	}
+	if result.errMsg == "" {
+		t.Errorf("got empty errMsg, want a real error message")
+	}
+}
+
+func FuzzCheckURL(f *testing.F) {
+	f.Add("https://example.com")
+	f.Add("")
+	f.Add("not-a-url")
+	f.Add("http://example.com/\r\nX-Injected: true")
+
+	f.Fuzz(func(t *testing.T, url string) {
+		results := make(chan checkResult, 1)
+		checkURL(url, results, 50*time.Millisecond)
+
+		select {
+		case result := <-results:
+			if result.url != url {
+				t.Errorf("got result.url = %q, want %q", result.url, url)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("checkURL never sent a result - possible hang")
+		}
+	})
 }
