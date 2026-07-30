@@ -28,8 +28,13 @@ jobs:
       - name: Test (race detector)
         run: go test ./... -race -v
 
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Vulnerability check
+        run: govulncheck ./...
+
       - name: Build
         run: go build -o urlwatch .
 
-      # TODO once checkpoint 25 lands: add govulncheck ./... here.
       # TODO once checkpoint 27 lands: consider testing -json output mode too.
