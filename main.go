@@ -32,9 +32,10 @@ func main() {
 
 	const requestTimeout = 500 * time.Millisecond
 
+	cfg := newProductionConfig(requestTimeout)
 	for i := 1; i <= numWorkers; i++ {
 		wg.Add(1)
-		go worker(ctx, i, jobs, results, &wg, requestTimeout)
+		go worker(ctx, i, jobs, results, &wg, cfg)
 	}
 
 	for _, u := range urls {

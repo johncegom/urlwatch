@@ -32,7 +32,7 @@ func TestWorkerPool_Concurrent(t *testing.T) {
 	numWorkers := 5
 	for i := 1; i <= numWorkers; i++ {
 		wg.Add(1)
-		go worker(ctx, i, jobs, results, &wg, 200*time.Millisecond)
+		go worker(ctx, i, jobs, results, &wg, newTestConfig(200*time.Millisecond))
 	}
 
 	for _, u := range urls {
@@ -105,7 +105,7 @@ func TestWorkerPool_MixedConditions_Race(t *testing.T) {
 	numWorkers := 5
 	for i := range numWorkers {
 		wg.Add(1)
-		go worker(ctx, i, jobs, results, &wg, 500*time.Millisecond)
+		go worker(ctx, i, jobs, results, &wg, newTestConfig(500*time.Millisecond))
 	}
 
 	for _, u := range urls {
