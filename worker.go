@@ -4,10 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 )
 
-func worker(ctx context.Context, id int, jobs <-chan string, results chan<- checkResult, wg *sync.WaitGroup, timeout time.Duration) {
+func worker(ctx context.Context, id int, jobs <-chan string, results chan<- checkResult, wg *sync.WaitGroup, cfg checkerConfig) {
 	defer wg.Done()
 	for {
 		select {
@@ -16,7 +15,7 @@ func worker(ctx context.Context, id int, jobs <-chan string, results chan<- chec
 				return
 			}
 			fmt.Printf("worker %d - picked up %v \n", id, url)
-			checkURL(url, results, timeout)
+			checkURL(url, results, cfg)
 
 		case <-ctx.Done():
 			return

@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"time"
+
+	"code.dny.dev/ssrf"
 )
 
 type checkStatus string
@@ -35,6 +38,27 @@ func newCheckResult(url string, status checkStatus, statusCode int, errMsg strin
 	}
 }
 
+type checkerConfig struct {
+	timeout time.Duration
+	client  *http.Client
+}
+
+func newProductionConfig(timeout time.Duration) checkerConfig {
+	return checkerConfig{
+		timeout: timeout,
+		client:  safeClient,
+	}
+}
+
+var safeClient = newSafeClient()
+
+func newSafeClient() *http.Client {
+	guardian := ssrf.New()
+	dialer := &net.Dialer{Control: guardian.Safe}
+	transport := &http.Transport{DialContext: dialer.DialContext}
+	return &http.Client{Transport: transport}
+}
+
 func classify(statusCode int) checkStatus {
 	if statusCode >= 200 && statusCode < 300 {
 		return statusHealthy
@@ -45,8 +69,8 @@ func classify(statusCode int) checkStatus {
 	}
 }
 
-func doOneAttempt(url string, timeout time.Duration) (*http.Response, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+func doOneAttempt(url string, cfg checkerConfig) (*http.Response, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -54,16 +78,16 @@ func doOneAttempt(url string, timeout time.Duration) (*http.Response, error) {
 		return nil, err
 	}
 
-	return http.DefaultClient.Do(req)
+	return cfg.client.Do(req)
 }
 
-func checkURL(url string, results chan<- checkResult, timeout time.Duration) {
+func checkURL(url string, results chan<- checkResult, cfg checkerConfig) {
 	start := time.Now()
 
 	const maxRetries = 3
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		resp, err := doOneAttempt(url, timeout)
+		resp, err := doOneAttempt(url, cfg)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				results <- newCheckResult(url, statusFailure, 0, "timeout", start)

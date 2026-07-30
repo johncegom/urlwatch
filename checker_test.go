@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+func newTestConfig(timeout time.Duration) checkerConfig {
+	return checkerConfig{
+		timeout: timeout,
+		client:  http.DefaultClient,
+	}
+}
+
 func TestClassify(t *testing.T) {
 	cases := []struct {
 		statusCode int
@@ -38,7 +45,7 @@ func TestCheckURL_Healthy(t *testing.T) {
 	defer server.Close()
 
 	results := make(chan checkResult, 1)
-	checkURL(server.URL, results, 10*time.Millisecond)
+	checkURL(server.URL, results, newTestConfig(10*time.Millisecond))
 	result := <-results
 
 	if result.status != statusHealthy {
@@ -59,7 +66,7 @@ func TestCheckURL_Reachable(t *testing.T) {
 	defer server.Close()
 
 	results := make(chan checkResult, 1)
-	checkURL(server.URL, results, 10*time.Millisecond)
+	checkURL(server.URL, results, newTestConfig(10*time.Millisecond))
 
 	result := <-results
 
@@ -80,7 +87,7 @@ func TestCheckURL_Timeout(t *testing.T) {
 	defer server.Close()
 
 	results := make(chan checkResult, 1)
-	checkURL(server.URL, results, 10*time.Millisecond)
+	checkURL(server.URL, results, newTestConfig(10*time.Millisecond))
 
 	result := <-results
 
@@ -109,7 +116,7 @@ func TestCheckURL_RetriesOn429_ThenSucceeds(t *testing.T) {
 	defer server.Close()
 
 	results := make(chan checkResult, 1)
-	checkURL(server.URL, results, 200*time.Millisecond)
+	checkURL(server.URL, results, newTestConfig(200*time.Millisecond))
 	result := <-results
 
 	if result.status != statusHealthy || result.statusCode != 200 {
@@ -129,7 +136,7 @@ func TestCheckURL_RetriesOn429_ThenExhausts(t *testing.T) {
 	defer server.Close()
 
 	results := make(chan checkResult, 1)
-	checkURL(server.URL, results, 200*time.Millisecond)
+	checkURL(server.URL, results, newTestConfig(200*time.Millisecond))
 	result := <-results
 
 	if result.status != statusFailure || result.statusCode != 429 {
@@ -147,7 +154,7 @@ func TestCheckURL_ConnectionRefused(t *testing.T) {
 	server.Close() // close immediately so nothing is listening when checkURL dials it
 
 	results := make(chan checkResult, 1)
-	checkURL(url, results, 200*time.Millisecond)
+	checkURL(url, results, newTestConfig(200*time.Millisecond))
 	result := <-results
 
 	if result.status != statusFailure || result.statusCode != 0 {
@@ -160,7 +167,7 @@ func TestCheckURL_ConnectionRefused(t *testing.T) {
 
 func TestCheckURL_EmptyURL(t *testing.T) {
 	results := make(chan checkResult, 1)
-	checkURL("", results, 200*time.Millisecond)
+	checkURL("", results, newTestConfig(200*time.Millisecond))
 	result := <-results
 
 	if result.status != statusFailure || result.statusCode != 0 {
@@ -175,7 +182,7 @@ func TestCheckURL_MalformedURL_ControlCharacter(t *testing.T) {
 	badURL := "http://example.com/\r\nX-Injected: true"
 
 	results := make(chan checkResult, 1)
-	checkURL(badURL, results, 200*time.Millisecond)
+	checkURL(badURL, results, newTestConfig(200*time.Millisecond))
 	result := <-results
 
 	if result.status != statusFailure || result.statusCode != 0 {
@@ -194,7 +201,7 @@ func FuzzCheckURL(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, url string) {
 		results := make(chan checkResult, 1)
-		checkURL(url, results, 50*time.Millisecond)
+		checkURL(url, results, newTestConfig(50*time.Millisecond))
 
 		select {
 		case result := <-results:
