@@ -11,16 +11,37 @@ import (
 const maxFileSize = 10 * 1024 * 1024 // 10MB
 const maxURLs = 10000
 const maxLineSize = 1 * 1024 * 1024 // 1MB per line
+const maxWorkers int = 100
 
-func parseFlags() string {
+type cliConfig struct {
+	filePath   string
+	numWorkers int
+}
+
+func parseFlags() cliConfig {
 	filePath := flag.String("file", "", "path to the file contains all urls need to be checked")
+	numWorkers := flag.Int("workers", 5, "number of concurrency workers")
 	flag.Parse()
 
 	if *filePath == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
-	return *filePath
+
+	if *numWorkers <= 0 {
+		fmt.Fprintf(os.Stderr, "error: -workers %d must be positive number\n", *numWorkers)
+		os.Exit(1)
+	}
+
+	if *numWorkers > maxWorkers {
+		fmt.Fprintf(os.Stderr, "error: -workers %d exceeds the maximum of %d\n", *numWorkers, maxWorkers)
+		os.Exit(1)
+	}
+
+	return cliConfig{
+		filePath:   *filePath,
+		numWorkers: *numWorkers,
+	}
 }
 
 func readURLs(filePath string) ([]string, []string, error) {

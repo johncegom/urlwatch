@@ -10,9 +10,9 @@ import (
 )
 
 func main() {
-	filePath := parseFlags()
+	flagConfigs := parseFlags()
 
-	urls, warnings, err := readURLs(filePath)
+	urls, warnings, err := readURLs(flagConfigs.filePath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -25,7 +25,7 @@ func main() {
 	jobs := make(chan string, len(urls))
 	results := make(chan checkResult, len(urls))
 	var wg sync.WaitGroup
-	numWorkers := 5
+	numWorkers := flagConfigs.numWorkers
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
