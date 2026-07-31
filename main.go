@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"sync"
-	"time"
 )
 
 func main() {
@@ -30,9 +29,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	const requestTimeout = 500 * time.Millisecond
-
-	cfg := newProductionConfig(requestTimeout)
+	cfg := newProductionConfig(flagConfigs.reqTimeout)
 	for i := 1; i <= numWorkers; i++ {
 		wg.Add(1)
 		go worker(ctx, i, jobs, results, &wg, cfg)
