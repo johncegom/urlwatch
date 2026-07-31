@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"time"
 )
 
 const maxFileSize = 10 * 1024 * 1024 // 10MB
@@ -13,14 +14,19 @@ const maxURLs = 10000
 const maxLineSize = 1 * 1024 * 1024 // 1MB per line
 const maxWorkers int = 100
 
+const minReqTimeout = 50 * time.Millisecond
+const maxReqTimeout = 30 * time.Second
+
 type cliConfig struct {
 	filePath   string
 	numWorkers int
+	reqTimeout time.Duration
 }
 
 func parseFlags() cliConfig {
 	filePath := flag.String("file", "", "path to the file contains all urls need to be checked")
 	numWorkers := flag.Int("workers", 5, "number of concurrency workers")
+	reqTimeout := flag.Duration("timeout", 500*time.Millisecond, "per-request timeout (e.g. 500ms or 2s)")
 	flag.Parse()
 
 	if *filePath == "" {
@@ -38,9 +44,20 @@ func parseFlags() cliConfig {
 		os.Exit(1)
 	}
 
+	if *reqTimeout < minReqTimeout {
+		fmt.Fprintf(os.Stderr, "error: -timeout %v must greater than %v\n", *reqTimeout, minReqTimeout)
+		os.Exit(1)
+	}
+
+	if *reqTimeout > maxReqTimeout {
+		fmt.Fprintf(os.Stderr, "error: -timeout %v exceed the maximum of %v\n", *reqTimeout, maxReqTimeout)
+		os.Exit(1)
+	}
+
 	return cliConfig{
 		filePath:   *filePath,
 		numWorkers: *numWorkers,
+		reqTimeout: *reqTimeout,
 	}
 }
 
