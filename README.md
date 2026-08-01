@@ -4,6 +4,11 @@ A concurrent URL health checker. Reads a list of URLs from a file, checks
 them all in parallel using a bounded worker pool, and reports which are
 healthy, which are reachable but access-gated, and which are failing.
 
+##
+
+</br>
+<div align="center"><a href='https://ko-fi.com/U8D024998A' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi6.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a></div>
+
 ## Build
 
 ```bash
