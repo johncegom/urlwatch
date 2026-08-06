@@ -45,17 +45,20 @@ func TestCheckURL_Healthy(t *testing.T) {
 	defer server.Close()
 
 	results := make(chan checkResult, 1)
-	checkURL(server.URL, results, newTestConfig(10*time.Millisecond))
+	checkURL(job{
+		index: 0,
+		url:   server.URL,
+	}, results, newTestConfig(10*time.Millisecond))
 	result := <-results
 
-	if result.status != statusHealthy {
-		t.Errorf("got status %v, want %v", result.status, statusHealthy)
+	if result.Status != statusHealthy {
+		t.Errorf("got status %v, want %v", result.Status, statusHealthy)
 	}
-	if result.statusCode != 200 {
-		t.Errorf("got status code = %v, want status code = 200", result.statusCode)
+	if result.StatusCode != 200 {
+		t.Errorf("got status code = %v, want status code = 200", result.StatusCode)
 	}
-	if result.errMsg != "" {
-		t.Errorf("got error message %v, want empty", result.errMsg)
+	if result.ErrMsg != "" {
+		t.Errorf("got error message %v, want empty", result.ErrMsg)
 	}
 }
 
@@ -66,15 +69,18 @@ func TestCheckURL_Reachable(t *testing.T) {
 	defer server.Close()
 
 	results := make(chan checkResult, 1)
-	checkURL(server.URL, results, newTestConfig(10*time.Millisecond))
+	checkURL(job{
+		index: 0,
+		url:   server.URL,
+	}, results, newTestConfig(10*time.Millisecond))
 
 	result := <-results
 
-	if result.status != statusReachable || result.statusCode != 403 {
-		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.status, result.statusCode, statusReachable, 403)
+	if result.Status != statusReachable || result.StatusCode != 403 {
+		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.Status, result.StatusCode, statusReachable, 403)
 	}
 
-	if result.errMsg == "" {
+	if result.ErrMsg == "" {
 		t.Errorf("got empty errMsg, want a real error message")
 	}
 }
@@ -87,18 +93,21 @@ func TestCheckURL_Timeout(t *testing.T) {
 	defer server.Close()
 
 	results := make(chan checkResult, 1)
-	checkURL(server.URL, results, newTestConfig(10*time.Millisecond))
+	checkURL(job{
+		index: 0,
+		url:   server.URL,
+	}, results, newTestConfig(10*time.Millisecond))
 
 	result := <-results
 
-	if result.status != statusFailure {
-		t.Errorf("got status %v, want %v", result.status, statusFailure)
+	if result.Status != statusFailure {
+		t.Errorf("got status %v, want %v", result.Status, statusFailure)
 	}
-	if result.statusCode != 0 {
-		t.Errorf("got status code = %v, want status code = 0", result.statusCode)
+	if result.StatusCode != 0 {
+		t.Errorf("got status code = %v, want status code = 0", result.StatusCode)
 	}
-	if result.errMsg != "timeout" {
-		t.Errorf("got error message %v, want timeout", result.errMsg)
+	if result.ErrMsg != "timeout" {
+		t.Errorf("got error message %v, want timeout", result.ErrMsg)
 	}
 }
 
@@ -116,11 +125,14 @@ func TestCheckURL_RetriesOn429_ThenSucceeds(t *testing.T) {
 	defer server.Close()
 
 	results := make(chan checkResult, 1)
-	checkURL(server.URL, results, newTestConfig(200*time.Millisecond))
+	checkURL(job{
+		index: 0,
+		url:   server.URL,
+	}, results, newTestConfig(200*time.Millisecond))
 	result := <-results
 
-	if result.status != statusHealthy || result.statusCode != 200 {
-		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.status, result.statusCode, statusHealthy, 200)
+	if result.Status != statusHealthy || result.StatusCode != 200 {
+		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.Status, result.StatusCode, statusHealthy, 200)
 	}
 	if callCount != 3 {
 		t.Errorf("got call %v times, want 3 times", callCount)
@@ -136,11 +148,14 @@ func TestCheckURL_RetriesOn429_ThenExhausts(t *testing.T) {
 	defer server.Close()
 
 	results := make(chan checkResult, 1)
-	checkURL(server.URL, results, newTestConfig(200*time.Millisecond))
+	checkURL(job{
+		index: 0,
+		url:   server.URL,
+	}, results, newTestConfig(200*time.Millisecond))
 	result := <-results
 
-	if result.status != statusFailure || result.statusCode != 429 {
-		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.status, result.statusCode, statusFailure, 429)
+	if result.Status != statusFailure || result.StatusCode != 429 {
+		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.Status, result.StatusCode, statusFailure, 429)
 	}
 
 	if callCount != 4 {
@@ -154,26 +169,32 @@ func TestCheckURL_ConnectionRefused(t *testing.T) {
 	server.Close() // close immediately so nothing is listening when checkURL dials it
 
 	results := make(chan checkResult, 1)
-	checkURL(url, results, newTestConfig(200*time.Millisecond))
+	checkURL(job{
+		index: 0,
+		url:   url,
+	}, results, newTestConfig(200*time.Millisecond))
 	result := <-results
 
-	if result.status != statusFailure || result.statusCode != 0 {
-		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.status, result.statusCode, statusFailure, 0)
+	if result.Status != statusFailure || result.StatusCode != 0 {
+		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.Status, result.StatusCode, statusFailure, 0)
 	}
-	if result.errMsg == "" {
+	if result.ErrMsg == "" {
 		t.Errorf("got empty errMsg, want a real connection error message")
 	}
 }
 
 func TestCheckURL_EmptyURL(t *testing.T) {
 	results := make(chan checkResult, 1)
-	checkURL("", results, newTestConfig(200*time.Millisecond))
+	checkURL(job{
+		index: 0,
+		url:   "",
+	}, results, newTestConfig(200*time.Millisecond))
 	result := <-results
 
-	if result.status != statusFailure || result.statusCode != 0 {
-		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.status, result.statusCode, statusFailure, 0)
+	if result.Status != statusFailure || result.StatusCode != 0 {
+		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.Status, result.StatusCode, statusFailure, 0)
 	}
-	if result.errMsg == "" {
+	if result.ErrMsg == "" {
 		t.Errorf("got empty errMsg, want a real error message")
 	}
 }
@@ -182,13 +203,16 @@ func TestCheckURL_MalformedURL_ControlCharacter(t *testing.T) {
 	badURL := "http://example.com/\r\nX-Injected: true"
 
 	results := make(chan checkResult, 1)
-	checkURL(badURL, results, newTestConfig(200*time.Millisecond))
+	checkURL(job{
+		index: 0,
+		url:   badURL,
+	}, results, newTestConfig(200*time.Millisecond))
 	result := <-results
 
-	if result.status != statusFailure || result.statusCode != 0 {
-		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.status, result.statusCode, statusFailure, 0)
+	if result.Status != statusFailure || result.StatusCode != 0 {
+		t.Errorf("got status: %v and statusCode = %v, want status: %v and statusCode = %v", result.Status, result.StatusCode, statusFailure, 0)
 	}
-	if result.errMsg == "" {
+	if result.ErrMsg == "" {
 		t.Errorf("got empty errMsg, want a real error message")
 	}
 }
@@ -201,12 +225,15 @@ func FuzzCheckURL(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, url string) {
 		results := make(chan checkResult, 1)
-		checkURL(url, results, newTestConfig(50*time.Millisecond))
+		checkURL(job{
+			index: 0,
+			url:   url,
+		}, results, newTestConfig(50*time.Millisecond))
 
 		select {
 		case result := <-results:
-			if result.url != url {
-				t.Errorf("got result.url = %q, want %q", result.url, url)
+			if result.Url != url {
+				t.Errorf("got result.url = %q, want %q", result.Url, url)
 			}
 		case <-time.After(2 * time.Second):
 			t.Fatalf("checkURL never sent a result - possible hang")

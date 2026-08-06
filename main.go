@@ -1,10 +1,13 @@
 package main
 
 import (
+	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"sync"
 )
 
@@ -21,7 +24,7 @@ func main() {
 		fmt.Println("warning: ", w)
 	}
 
-	jobs := make(chan string, len(urls))
+	jobs := make(chan job, len(urls))
 	results := make(chan checkResult, len(urls))
 	var wg sync.WaitGroup
 	numWorkers := flagConfigs.numWorkers
@@ -35,8 +38,11 @@ func main() {
 		go worker(ctx, i, jobs, results, &wg, cfg)
 	}
 
-	for _, u := range urls {
-		jobs <- u
+	for i, u := range urls {
+		jobs <- job{
+			index: i,
+			url:   u,
+		}
 	}
 	close(jobs)
 
@@ -45,17 +51,48 @@ func main() {
 
 	hasFailure := false
 
+	var handleResult func(checkResult)
+	var finish func()
+
+	if flagConfigs.jsonOutput {
+		var allResults []checkResult
+		handleResult = func(r checkResult) {
+			allResults = append(allResults, r)
+		}
+		finish = func() {
+			slices.SortFunc(allResults, func(a, b checkResult) int {
+				return cmp.Compare(a.Index, b.Index)
+
+			})
+			data, err := json.Marshal(allResults)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+
+			fmt.Println(string(data))
+		}
+	} else {
+		handleResult = func(r checkResult) {
+			switch r.Status {
+			case statusHealthy:
+				fmt.Printf("%v is %v(%v) \n", r.Url, r.Status, r.StatusCode)
+			case statusReachable:
+				fmt.Printf("%v is %v(%v) but %v \n", r.Url, r.Status, r.StatusCode, r.ErrMsg)
+			default:
+				fmt.Printf("%v is %v(%v) with error: %v \n", r.Url, r.Status, r.StatusCode, r.ErrMsg)
+			}
+		}
+		finish = func() {}
+	}
+
 	for r := range results {
-		switch r.status {
-		case statusHealthy:
-			fmt.Printf("%v is %v(%v) \n", r.url, r.status, r.statusCode)
-		case statusReachable:
-			fmt.Printf("%v is %v(%v) but %v \n", r.url, r.status, r.statusCode, r.errMsg)
-		default:
-			fmt.Printf("%v is %v(%v) with error: %v \n", r.url, r.status, r.statusCode, r.errMsg)
+		if r.Status == statusFailure {
 			hasFailure = true
 		}
+		handleResult(r)
 	}
+	finish()
 
 	if hasFailure {
 		os.Exit(1)

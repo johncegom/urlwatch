@@ -22,7 +22,7 @@ func TestWorkerPool_Concurrent(t *testing.T) {
 		urls[i] = server.URL
 	}
 
-	jobs := make(chan string, len(urls))
+	jobs := make(chan job, len(urls))
 	results := make(chan checkResult, len(urls))
 	var wg sync.WaitGroup
 
@@ -35,8 +35,11 @@ func TestWorkerPool_Concurrent(t *testing.T) {
 		go worker(ctx, i, jobs, results, &wg, newTestConfig(200*time.Millisecond))
 	}
 
-	for _, u := range urls {
-		jobs <- u
+	for i, u := range urls {
+		jobs <- job{
+			index: i,
+			url:   u,
+		}
 	}
 	close(jobs)
 
@@ -45,7 +48,7 @@ func TestWorkerPool_Concurrent(t *testing.T) {
 
 	successCount := 0
 	for r := range results {
-		if r.status == statusHealthy {
+		if r.Status == statusHealthy {
 			successCount++
 		}
 	}
@@ -96,7 +99,7 @@ func TestWorkerPool_MixedConditions_Race(t *testing.T) {
 		urls = append(urls, fmt.Sprintf("%s/retry/%d", server.URL, i))
 	}
 
-	jobs := make(chan string, len(urls))
+	jobs := make(chan job, len(urls))
 	results := make(chan checkResult, len(urls))
 	var wg sync.WaitGroup
 
@@ -108,8 +111,11 @@ func TestWorkerPool_MixedConditions_Race(t *testing.T) {
 		go worker(ctx, i, jobs, results, &wg, newTestConfig(500*time.Millisecond))
 	}
 
-	for _, u := range urls {
-		jobs <- u
+	for i, u := range urls {
+		jobs <- job{
+			index: i,
+			url:   u,
+		}
 	}
 	close(jobs)
 
@@ -118,7 +124,7 @@ func TestWorkerPool_MixedConditions_Race(t *testing.T) {
 
 	healthy, failure := 0, 0
 	for r := range results {
-		switch r.status {
+		switch r.Status {
 		case statusHealthy:
 			healthy++
 		case statusFailure:

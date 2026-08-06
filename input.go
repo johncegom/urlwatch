@@ -21,12 +21,14 @@ type cliConfig struct {
 	filePath   string
 	numWorkers int
 	reqTimeout time.Duration
+	jsonOutput bool
 }
 
 func parseFlags() cliConfig {
 	filePath := flag.String("file", "", "path to the file contains all urls need to be checked")
 	numWorkers := flag.Int("workers", 5, "number of concurrency workers")
 	reqTimeout := flag.Duration("timeout", 500*time.Millisecond, "per-request timeout (e.g. 500ms or 2s)")
+	jsonOutput := flag.Bool("json", false, "output results as a JSON array instead of plain text")
 	flag.Parse()
 
 	if *filePath == "" {
@@ -58,6 +60,7 @@ func parseFlags() cliConfig {
 		filePath:   *filePath,
 		numWorkers: *numWorkers,
 		reqTimeout: *reqTimeout,
+		jsonOutput: *jsonOutput,
 	}
 }
 
