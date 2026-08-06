@@ -19,22 +19,24 @@ const (
 )
 
 type checkResult struct {
-	url        string
-	status     checkStatus
-	statusCode int    // 0 if the request never got a response at all
-	errMsg     string // empty if statusCode is set and valid
-	latency    time.Duration
-	checkedAt  time.Time
+	Index      int         `json:"index"`
+	Url        string      `json:"url"`
+	Status     checkStatus `json:"status"`
+	StatusCode int         `json:"statusCode"` // 0 if the request never got a response at all
+	ErrMsg     string      `json:"errMsg"`     // empty if statusCode is set and valid
+	Latency    int64       `json:"latencyMs"`
+	CheckedAt  time.Time   `json:"checkedAt"`
 }
 
-func newCheckResult(url string, status checkStatus, statusCode int, errMsg string, start time.Time) checkResult {
+func newCheckResult(index int, url string, status checkStatus, statusCode int, errMsg string, start time.Time) checkResult {
 	return checkResult{
-		url:        url,
-		status:     status,
-		statusCode: statusCode,
-		errMsg:     errMsg,
-		latency:    time.Since(start),
-		checkedAt:  time.Now(),
+		Index:      index,
+		Url:        url,
+		Status:     status,
+		StatusCode: statusCode,
+		ErrMsg:     errMsg,
+		Latency:    time.Since(start).Milliseconds(),
+		CheckedAt:  time.Now(),
 	}
 }
 
@@ -81,19 +83,19 @@ func doOneAttempt(url string, cfg checkerConfig) (*http.Response, error) {
 	return cfg.client.Do(req)
 }
 
-func checkURL(url string, results chan<- checkResult, cfg checkerConfig) {
+func checkURL(job job, results chan<- checkResult, cfg checkerConfig) {
 	start := time.Now()
 
 	const maxRetries = 3
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		resp, err := doOneAttempt(url, cfg)
+		resp, err := doOneAttempt(job.url, cfg)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
-				results <- newCheckResult(url, statusFailure, 0, "timeout", start)
+				results <- newCheckResult(job.index, job.url, statusFailure, 0, "timeout", start)
 				return
 			}
-			results <- newCheckResult(url, statusFailure, 0, err.Error(), start)
+			results <- newCheckResult(job.index, job.url, statusFailure, 0, err.Error(), start)
 			return
 		}
 
@@ -105,7 +107,7 @@ func checkURL(url string, results chan<- checkResult, cfg checkerConfig) {
 		}
 
 		if resp.StatusCode != http.StatusTooManyRequests {
-			results <- newCheckResult(url, status, resp.StatusCode, errMsg, start)
+			results <- newCheckResult(job.index, job.url, status, resp.StatusCode, errMsg, start)
 			resp.Body.Close()
 			return
 		}
@@ -117,5 +119,5 @@ func checkURL(url string, results chan<- checkResult, cfg checkerConfig) {
 		}
 	}
 
-	results <- newCheckResult(url, statusFailure, 429, "too many requests", start)
+	results <- newCheckResult(job.index, job.url, statusFailure, 429, "too many requests", start)
 }

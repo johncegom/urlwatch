@@ -6,16 +6,21 @@ import (
 	"sync"
 )
 
-func worker(ctx context.Context, id int, jobs <-chan string, results chan<- checkResult, wg *sync.WaitGroup, cfg checkerConfig) {
+type job struct {
+	index int
+	url   string
+}
+
+func worker(ctx context.Context, id int, jobs <-chan job, results chan<- checkResult, wg *sync.WaitGroup, cfg checkerConfig) {
 	defer wg.Done()
 	for {
 		select {
-		case url, ok := <-jobs:
+		case j, ok := <-jobs:
 			if !ok {
 				return
 			}
-			fmt.Printf("worker %d - picked up %v \n", id, url)
-			checkURL(url, results, cfg)
+			fmt.Printf("worker %d - picked up %v \n", id, j.url)
+			checkURL(j, results, cfg)
 
 		case <-ctx.Done():
 			return
