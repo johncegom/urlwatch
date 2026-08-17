@@ -5,11 +5,49 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"slices"
 	"sync"
 )
+
+func processResults(w io.Writer, results []checkResult, jsonOutput bool) bool {
+	hasFailure := false
+
+	for _, r := range results {
+		if r.Status == statusFailure {
+			hasFailure = true
+			break
+		}
+	}
+
+	if jsonOutput {
+		slices.SortFunc(results, func(a, b checkResult) int {
+			return cmp.Compare(a.Index, b.Index)
+		})
+		data, err := json.Marshal(results)
+		if err != nil {
+			fmt.Fprintln(w, err)
+			os.Exit(1)
+		}
+
+		fmt.Fprintln(w, string(data))
+	} else {
+		for _, r := range results {
+			switch r.Status {
+			case statusHealthy:
+				fmt.Fprintf(w, "%v is %v(%v) \n", r.Url, r.Status, r.StatusCode)
+			case statusReachable:
+				fmt.Fprintf(w, "%v is %v(%v) but %v \n", r.Url, r.Status, r.StatusCode, r.ErrMsg)
+			default:
+				fmt.Fprintf(w, "%v is %v(%v) with error: %v \n", r.Url, r.Status, r.StatusCode, r.ErrMsg)
+			}
+		}
+
+	}
+	return hasFailure
+}
 
 func main() {
 	flagConfigs := parseFlags()
@@ -49,50 +87,12 @@ func main() {
 	wg.Wait()
 	close(results)
 
-	hasFailure := false
-
-	var handleResult func(checkResult)
-	var finish func()
-
-	if flagConfigs.jsonOutput {
-		var allResults []checkResult
-		handleResult = func(r checkResult) {
-			allResults = append(allResults, r)
-		}
-		finish = func() {
-			slices.SortFunc(allResults, func(a, b checkResult) int {
-				return cmp.Compare(a.Index, b.Index)
-
-			})
-			data, err := json.Marshal(allResults)
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
-
-			fmt.Println(string(data))
-		}
-	} else {
-		handleResult = func(r checkResult) {
-			switch r.Status {
-			case statusHealthy:
-				fmt.Printf("%v is %v(%v) \n", r.Url, r.Status, r.StatusCode)
-			case statusReachable:
-				fmt.Printf("%v is %v(%v) but %v \n", r.Url, r.Status, r.StatusCode, r.ErrMsg)
-			default:
-				fmt.Printf("%v is %v(%v) with error: %v \n", r.Url, r.Status, r.StatusCode, r.ErrMsg)
-			}
-		}
-		finish = func() {}
-	}
-
+	var allResults []checkResult
 	for r := range results {
-		if r.Status == statusFailure {
-			hasFailure = true
-		}
-		handleResult(r)
+		allResults = append(allResults, r)
 	}
-	finish()
+
+	hasFailure := processResults(os.Stdout, allResults, flagConfigs.jsonOutput)
 
 	if hasFailure {
 		os.Exit(1)
