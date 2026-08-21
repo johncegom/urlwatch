@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/johncegom/urlwatch/checker"
 )
 
 type job struct {
@@ -11,7 +13,7 @@ type job struct {
 	url   string
 }
 
-func worker(ctx context.Context, id int, jobs <-chan job, results chan<- checkResult, wg *sync.WaitGroup, cfg checkerConfig) {
+func worker(ctx context.Context, id int, jobs <-chan job, results chan<- checker.CheckResult, wg *sync.WaitGroup, cfg checker.CheckerConfig) {
 	defer wg.Done()
 	for {
 		select {
@@ -20,7 +22,8 @@ func worker(ctx context.Context, id int, jobs <-chan job, results chan<- checkRe
 				return
 			}
 			fmt.Printf("worker %d - picked up %v \n", id, j.url)
-			checkURL(j, results, cfg)
+			result := checker.CheckURL(j.url, j.index, cfg)
+			results <- result
 
 		case <-ctx.Done():
 			return

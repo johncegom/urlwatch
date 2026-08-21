@@ -1,4 +1,4 @@
-package main
+package checker
 
 import (
 	"context"
@@ -10,26 +10,26 @@ import (
 	"code.dny.dev/ssrf"
 )
 
-type checkStatus string
+type CheckStatus string
 
 const (
-	statusHealthy   checkStatus = "healthy"
-	statusReachable checkStatus = "reachable"
-	statusFailure   checkStatus = "failure"
+	StatusHealthy   CheckStatus = "healthy"
+	StatusReachable CheckStatus = "reachable"
+	StatusFailure   CheckStatus = "failure"
 )
 
-type checkResult struct {
+type CheckResult struct {
 	Index      int         `json:"index"`
 	Url        string      `json:"url"`
-	Status     checkStatus `json:"status"`
+	Status     CheckStatus `json:"status"`
 	StatusCode int         `json:"statusCode"` // 0 if the request never got a response at all
 	ErrMsg     string      `json:"errMsg"`     // empty if statusCode is set and valid
 	Latency    int64       `json:"latencyMs"`
 	CheckedAt  time.Time   `json:"checkedAt"`
 }
 
-func newCheckResult(index int, url string, status checkStatus, statusCode int, errMsg string, start time.Time) checkResult {
-	return checkResult{
+func newCheckResult(index int, url string, status CheckStatus, statusCode int, errMsg string, start time.Time) CheckResult {
+	return CheckResult{
 		Index:      index,
 		Url:        url,
 		Status:     status,
@@ -40,19 +40,19 @@ func newCheckResult(index int, url string, status checkStatus, statusCode int, e
 	}
 }
 
-type checkerConfig struct {
-	timeout time.Duration
-	client  *http.Client
+type CheckerConfig struct {
+	Timeout time.Duration
+	Client  *http.Client
 }
 
-func newProductionConfig(timeout time.Duration) checkerConfig {
-	return checkerConfig{
-		timeout: timeout,
-		client:  safeClient,
+func NewProductionConfig(timeout time.Duration) CheckerConfig {
+	return CheckerConfig{
+		Timeout: timeout,
+		Client:  SafeClient,
 	}
 }
 
-var safeClient = newSafeClient()
+var SafeClient = newSafeClient()
 
 func newSafeClient() *http.Client {
 	guardian := ssrf.New()
@@ -61,18 +61,18 @@ func newSafeClient() *http.Client {
 	return &http.Client{Transport: transport}
 }
 
-func classify(statusCode int) checkStatus {
+func classify(statusCode int) CheckStatus {
 	if statusCode >= 200 && statusCode < 300 {
-		return statusHealthy
+		return StatusHealthy
 	} else if statusCode == 401 || statusCode == 403 {
-		return statusReachable
+		return StatusReachable
 	} else {
-		return statusFailure
+		return StatusFailure
 	}
 }
 
-func doOneAttempt(url string, cfg checkerConfig) (*http.Response, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)
+func doOneAttempt(url string, cfg CheckerConfig) (*http.Response, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -80,36 +80,34 @@ func doOneAttempt(url string, cfg checkerConfig) (*http.Response, error) {
 		return nil, err
 	}
 
-	return cfg.client.Do(req)
+	return cfg.Client.Do(req)
 }
 
-func checkURL(job job, results chan<- checkResult, cfg checkerConfig) {
+func CheckURL(url string, index int, cfg CheckerConfig) CheckResult {
 	start := time.Now()
 
 	const maxRetries = 3
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		resp, err := doOneAttempt(job.url, cfg)
+		resp, err := doOneAttempt(url, cfg)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
-				results <- newCheckResult(job.index, job.url, statusFailure, 0, "timeout", start)
-				return
+				return newCheckResult(index, url, StatusFailure, 0, "timeout", start)
+
 			}
-			results <- newCheckResult(job.index, job.url, statusFailure, 0, err.Error(), start)
-			return
+			return newCheckResult(index, url, StatusFailure, 0, err.Error(), start)
 		}
 
 		status := classify(resp.StatusCode)
 		errMsg := ""
 
-		if status == statusReachable {
+		if status == StatusReachable {
 			errMsg = "may require authentication"
 		}
 
 		if resp.StatusCode != http.StatusTooManyRequests {
-			results <- newCheckResult(job.index, job.url, status, resp.StatusCode, errMsg, start)
 			resp.Body.Close()
-			return
+			return newCheckResult(index, url, status, resp.StatusCode, errMsg, start)
 		}
 		resp.Body.Close()
 
@@ -119,5 +117,5 @@ func checkURL(job job, results chan<- checkResult, cfg checkerConfig) {
 		}
 	}
 
-	results <- newCheckResult(job.index, job.url, statusFailure, 429, "too many requests", start)
+	return newCheckResult(index, url, StatusFailure, 429, "too many requests", start)
 }

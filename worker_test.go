@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/johncegom/urlwatch/checker"
 )
 
 func TestWorkerPool_Concurrent(t *testing.T) {
@@ -23,7 +25,7 @@ func TestWorkerPool_Concurrent(t *testing.T) {
 	}
 
 	jobs := make(chan job, len(urls))
-	results := make(chan checkResult, len(urls))
+	results := make(chan checker.CheckResult, len(urls))
 	var wg sync.WaitGroup
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -32,7 +34,7 @@ func TestWorkerPool_Concurrent(t *testing.T) {
 	numWorkers := 5
 	for i := 1; i <= numWorkers; i++ {
 		wg.Add(1)
-		go worker(ctx, i, jobs, results, &wg, newTestConfig(200*time.Millisecond))
+		go worker(ctx, i, jobs, results, &wg, checker.CheckerConfig{Timeout: 200 * time.Millisecond, Client: http.DefaultClient})
 	}
 
 	for i, u := range urls {
@@ -48,7 +50,7 @@ func TestWorkerPool_Concurrent(t *testing.T) {
 
 	successCount := 0
 	for r := range results {
-		if r.Status == statusHealthy {
+		if r.Status == checker.StatusHealthy {
 			successCount++
 		}
 	}
@@ -100,7 +102,7 @@ func TestWorkerPool_MixedConditions_Race(t *testing.T) {
 	}
 
 	jobs := make(chan job, len(urls))
-	results := make(chan checkResult, len(urls))
+	results := make(chan checker.CheckResult, len(urls))
 	var wg sync.WaitGroup
 
 	ctx := t.Context()
@@ -108,7 +110,7 @@ func TestWorkerPool_MixedConditions_Race(t *testing.T) {
 	numWorkers := 5
 	for i := range numWorkers {
 		wg.Add(1)
-		go worker(ctx, i, jobs, results, &wg, newTestConfig(500*time.Millisecond))
+		go worker(ctx, i, jobs, results, &wg, checker.CheckerConfig{Timeout: 500 * time.Millisecond, Client: http.DefaultClient})
 	}
 
 	for i, u := range urls {
@@ -125,9 +127,9 @@ func TestWorkerPool_MixedConditions_Race(t *testing.T) {
 	healthy, failure := 0, 0
 	for r := range results {
 		switch r.Status {
-		case statusHealthy:
+		case checker.StatusHealthy:
 			healthy++
-		case statusFailure:
+		case checker.StatusFailure:
 			failure++
 		}
 	}
