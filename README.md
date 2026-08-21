@@ -1,8 +1,9 @@
 # urlwatch
 
-A concurrent URL health checker. Reads a list of URLs from a file, checks
-them all in parallel using a bounded worker pool, and reports which are
-healthy, which are reachable but access-gated, and which are failing.
+A concurrent URL health checker. It reads a list of URLs from a file,
+checks them all in parallel with a bounded worker pool, and tells you
+which ones are healthy, which are reachable but gated, and which are
+just failing.
 
 ##
 
@@ -43,8 +44,8 @@ https://www.wikipedia.org
 https://www.reddit.com
 ```
 
-Lines that aren't valid URLs are skipped with a warning printed at
-startup — the rest of the file still runs normally.
+Lines that aren't valid URLs get skipped with a warning at startup;
+everything else in the file still runs.
 
 Stop a run early with `Ctrl+C`. Checks already in progress finish; no new
 ones start.
@@ -93,10 +94,10 @@ Each URL is classified into one of three states based on the HTTP response:
 | `reachable`  | Server responded, but access is gated              | 401, 403              |
 | `failure`    | Endpoint missing, server error, or unreachable     | anything else, timeout, network error |
 
-`reachable` is intentionally **not** treated as a failure — the target is
-up and working, it's just protected. `404` **is** treated as a failure,
-since it means the specific endpoint being watched no longer exists,
-which is exactly the kind of change a health check should catch.
+`reachable` isn't treated as a failure — the target is up, just
+protected. `404` is, though: it means the endpoint you're watching no
+longer exists, and that's exactly the kind of change a health check
+exists to catch.
 
 A `429 Too Many Requests` response is retried up to 3 times with
 exponential backoff before being reported as a `failure`.
