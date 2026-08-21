@@ -10,20 +10,22 @@ import (
 	"os/signal"
 	"slices"
 	"sync"
+
+	"github.com/johncegom/urlwatch/checker"
 )
 
-func processResults(w io.Writer, results []checkResult, jsonOutput bool) bool {
+func processResults(w io.Writer, results []checker.CheckResult, jsonOutput bool) bool {
 	hasFailure := false
 
 	for _, r := range results {
-		if r.Status == statusFailure {
+		if r.Status == checker.StatusFailure {
 			hasFailure = true
 			break
 		}
 	}
 
 	if jsonOutput {
-		slices.SortFunc(results, func(a, b checkResult) int {
+		slices.SortFunc(results, func(a, b checker.CheckResult) int {
 			return cmp.Compare(a.Index, b.Index)
 		})
 		data, err := json.Marshal(results)
@@ -36,9 +38,9 @@ func processResults(w io.Writer, results []checkResult, jsonOutput bool) bool {
 	} else {
 		for _, r := range results {
 			switch r.Status {
-			case statusHealthy:
+			case checker.StatusHealthy:
 				fmt.Fprintf(w, "%v is %v(%v) \n", r.Url, r.Status, r.StatusCode)
-			case statusReachable:
+			case checker.StatusReachable:
 				fmt.Fprintf(w, "%v is %v(%v) but %v \n", r.Url, r.Status, r.StatusCode, r.ErrMsg)
 			default:
 				fmt.Fprintf(w, "%v is %v(%v) with error: %v \n", r.Url, r.Status, r.StatusCode, r.ErrMsg)
@@ -63,14 +65,14 @@ func main() {
 	}
 
 	jobs := make(chan job, len(urls))
-	results := make(chan checkResult, len(urls))
+	results := make(chan checker.CheckResult, len(urls))
 	var wg sync.WaitGroup
 	numWorkers := flagConfigs.numWorkers
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	cfg := newProductionConfig(flagConfigs.reqTimeout)
+	cfg := checker.NewProductionConfig(flagConfigs.reqTimeout)
 	for i := 1; i <= numWorkers; i++ {
 		wg.Add(1)
 		go worker(ctx, i, jobs, results, &wg, cfg)
@@ -87,7 +89,7 @@ func main() {
 	wg.Wait()
 	close(results)
 
-	var allResults []checkResult
+	var allResults []checker.CheckResult
 	for r := range results {
 		allResults = append(allResults, r)
 	}
